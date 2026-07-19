@@ -5,6 +5,7 @@
 """
 
 import json
+import random
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -99,3 +100,46 @@ class Gallery:
         for e in self._entries:
             out[e.category] = out.get(e.category, 0) + 1
         return out
+
+    # ------------------------------ 抽取 ------------------------------
+    def pick(
+        self,
+        category: str = "",
+        keyword: str = "",
+        allow_nsfw: bool = False,
+        exclude: frozenset[str] | set[str] = frozenset(),
+    ) -> ImageEntry | None:
+        """筛选后随机抽一张；候选全在 exclude 里时忽略 exclude（重置防重复）。"""
+        pool = [e for e in self._entries if self._match(e, category, keyword, allow_nsfw)]
+        if not pool:
+            return None
+        fresh = [e for e in pool if e.rel_path not in exclude]
+        return random.choice(fresh or pool)
+
+    @staticmethod
+    def _match(e: ImageEntry, category: str, keyword: str, allow_nsfw: bool) -> bool:
+        if category and e.category != category:
+            return False
+        if e.rating == "nsfw" and not allow_nsfw:
+            return False
+        if keyword:
+            kw = keyword.lower()
+            hay = (
+                e.title.lower(),
+                e.artist.lower(),
+                Path(e.rel_path).name.lower(),
+                *(t.lower() for t in e.tags),
+            )
+            if not any(kw in h for h in hay):
+                return False
+        return True
+
+
+def build_caption(entry: ImageEntry) -> str:
+    """发图附言：「标题」 by 画师；缺哪个省哪个，都没有返回空串。"""
+    parts = []
+    if entry.title:
+        parts.append(f"「{entry.title}」")
+    if entry.artist:
+        parts.append(f"by {entry.artist}")
+    return " ".join(parts)
