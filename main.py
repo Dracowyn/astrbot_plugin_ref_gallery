@@ -18,7 +18,7 @@ from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.star.filter.command import GreedyStr
 
-from .gallery import Gallery, build_caption
+from .gallery import Gallery, GalleryError, build_caption
 
 PLUGIN_NAME = "astrbot_plugin_ref_gallery"
 BUILTIN_CATEGORIES = ("ref", "commission", "daily")
@@ -228,3 +228,81 @@ class RefGalleryPlugin(Star):
         else:
             state = "开" if self._nsfw_allowed(umo) else "关"
             yield event.plain_result(f"用法：图库nsfw on|off（本会话当前：{state}）")
+
+    # ------------------------------ 管理指令 ------------------------------
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("重扫图库")
+    async def rescan(self, event: AstrMessageEvent):
+        """重扫图库：重新扫描目录 + 重读清单（管理员）。"""
+        added, removed = self.gallery.scan()
+        total = len(self.gallery.entries)
+        yield event.plain_result(f"重扫完成：共 {total} 张，新增 {added}，移除 {removed}。")
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("图库状态")
+    async def status(self, event: AstrMessageEvent):
+        """图库状态：各类别张数、nsfw 数、清单覆盖率（管理员）。"""
+        yield event.plain_result("\n".join(self._status_lines(event.unified_msg_origin)))
+
+    def _status_lines(self, umo: str) -> list[str]:
+        entries = self.gallery.entries
+        lines = ["设定图库 · 状态", f"  总数：{len(entries)} 张"]
+        for cat, n in sorted(self.gallery.categories().items()):
+            lines.append(f"  {cat}：{n} 张")
+        nsfw = sum(1 for e in entries if e.rating == "nsfw")
+        with_meta = sum(1 for e in entries if e.title or e.artist or e.tags)
+        pct = round(with_meta * 100 / len(entries)) if entries else 0
+        lines.append(f"  nsfw：{nsfw} 张")
+        lines.append(f"  清单覆盖率：{pct}%")
+        if self.gallery.manifest_degraded:
+            lines.append("  ⚠ manifest.json 解析失败，已降级为纯目录模式")
+        lines.append(f"  本会话 nsfw：{'开' if self._nsfw_allowed(umo) else '关'}")
+        return lines
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("图库信息")
+    async def info(self, event: AstrMessageEvent, name: GreedyStr):
+        """图库信息 <文件名>：查看某张图的元数据（管理员）。"""
+        matches = self.gallery.find_by_name((name or "").strip())
+        if not matches:
+            yield event.plain_result(f"没找到「{name}」，试试文件名或完整相对路径？")
+            return
+        if len(matches) > 1:
+            listing = "\n".join(f"  {e.rel_path}" for e in matches[:10])
+            yield event.plain_result(f"命中多张，请用完整路径重试：\n{listing}")
+            return
+        e = matches[0]
+        yield event.plain_result(
+            "\n".join([
+                e.rel_path,
+                f"  类别：{e.category}",
+                f"  标题：{e.title or '（无）'}",
+                f"  画师：{e.artist or '（无）'}",
+                f"  标签：{'、'.join(e.tags) or '（无）'}",
+                f"  分级：{e.rating}",
+            ])
+        )
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("图库标记")
+    async def mark(self, event: AstrMessageEvent, name: str, assignment: GreedyStr):
+        """图库标记 <文件名> <key>=<value>：修改 title/artist/rating/tags（管理员）。"""
+        yield event.plain_result(self._apply_mark(name, (assignment or "").strip()))
+
+    def _apply_mark(self, name: str, assignment: str) -> str:
+        """标记逻辑主体。返回用户可读回复（成功或失败原因）。"""
+        matches = self.gallery.find_by_name(name.strip())
+        if not matches:
+            return f"没找到「{name}」，试试文件名或完整相对路径？"
+        if len(matches) > 1:
+            listing = "\n".join(f"  {e.rel_path}" for e in matches[:10])
+            return f"命中多张，请用完整路径重试：\n{listing}"
+        key, sep, value = assignment.partition("=")
+        key, value = key.strip(), value.strip()
+        if not sep or not key:
+            return "格式：图库标记 <文件名> <key>=<value>（key 可用 title/artist/rating/tags，tags 用逗号分隔）"
+        try:
+            entry = self.gallery.set_meta(matches[0].rel_path, **{key: value})
+        except GalleryError as e:
+            return f"标记失败：{e}"
+        return f"已更新 {entry.rel_path}：{key}={value}"
