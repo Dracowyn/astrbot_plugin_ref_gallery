@@ -1,0 +1,53 @@
+{
+  "enabled": {
+    "description": "启用插件",
+    "type": "bool",
+    "default": true
+  },
+  "llm_tool_enabled": {
+    "description": "允许 LLM 调用发图工具",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，机器人被唤醒时其 LLM 可在用户问「你的设定图」等场景自行调用 show_my_image 工具发图。关闭则仅保留指令触发。"
+  },
+  "cooldown_seconds": {
+    "description": "同一会话发图冷却（秒）",
+    "type": "int",
+    "default": 30,
+    "hint": "指令与 LLM 工具共用，防刷屏。0 表示不限制。"
+  },
+  "show_caption": {
+    "description": "发图时附标题与画师署名",
+    "type": "bool",
+    "default": true,
+    "hint": "有元数据时附一行「标题」by 画师。"
+  },
+  "recent_history_size": {
+    "description": "防重复：记住最近发过的张数",
+    "type": "int",
+    "default": 10,
+    "hint": "每会话独立记忆，抽图时优先没发过的；全发遍了自动重置。重启清零。"
+  },
+  "ref_aliases": {
+    "description": "ref（设定图）类别的中文别名",
+    "type": "string",
+    "default": "设定图,设定,参考图,refsheet",
+    "hint": "逗号分隔。LLM 或指令给出这些词时解析为 ref 类别。"
+  },
+  "commission_aliases": {
+    "description": "commission（约稿）类别的中文别名",
+    "type": "string",
+    "default": "约稿,稿子,委托,commission"
+  },
+  "daily_aliases": {
+    "description": "daily（日常/照片）类别的中文别名",
+    "type": "string",
+    "default": "日常,照片,自拍,daily"
+  },
+  "nsfw_enabled_sessions": {
+    "description": "允许发 nsfw 图的会话白名单",
+    "type": "list",
+    "default": [],
+    "hint": "条目为会话的 unified_msg_origin。一般用管理指令「图库nsfw on」在目标会话里直接开启，无需手填。"
+  }
+}

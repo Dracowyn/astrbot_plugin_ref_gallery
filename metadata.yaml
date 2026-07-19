@@ -1,0 +1,9 @@
+name: astrbot_plugin_ref_gallery
+display_name: 设定图库
+desc: bot 人设图库：被问「你的设定图 / 照片 / 约的稿子」时，从本地图库按类别（设定图 ref / 约稿 commission / 日常 daily）挑一张发送。支持 manifest.json 元数据（标题 / 画师 / 标签 / 分级）、LLM 工具 show_my_image、会话级 nsfw 白名单、防重复抽取与管理指令。
+author: dracowyn
+version: 0.1.0
+short_desc: 被问设定图/约稿/照片时从本地图库抽图发送
+support_platforms:
+  - aiocqhttp
+astrbot_version: ">=4.25,<5"
