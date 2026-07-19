@@ -3,7 +3,7 @@
 被问「你的设定图 / 照片 / 约的稿子」时，从本地图库按类别挑一张图发送。
 - 指令：`设定图 [关键词]`（别名 `来张设定`）、`约稿图 [关键词]`
 - LLM 工具：`show_my_image`，机器人被唤醒时可自行调用发图（与指令共用冷却）
-- 管理指令：重扫图库 / 图库状态 / 图库信息 / 图库标记 / 图库nsfw（见 Task 5/6）
+- 管理指令：重扫图库 / 图库状态 / 图库信息 / 图库标记 / 图库nsfw
 """
 
 # 注意：本模块特意不使用 `from __future__ import annotations`。该 future 会把注解
@@ -81,7 +81,7 @@ class RefGalleryPlugin(Star):
         yield event.chain_result(chain)
 
     # ------------------------------ 抽图核心 ------------------------------
-    def _pick_chain(self, umo: str, category: str, keyword: str):
+    def _pick_chain(self, umo: str, category: str, keyword: str) -> tuple[list | None, str]:
         """抽一张图。成功返回 (消息链, 说明文字)；失败返回 (None, 用户可读提示)。
 
         说明文字 = 附言（有元数据时）或文件名，供 LLM 工具向模型描述发了什么。
