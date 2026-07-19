@@ -3,6 +3,13 @@
 bot 人设图库：被问「你的设定图 / 照片 / 约的稿子」时，从本地图库按类别挑一张发送。
 面向龙圈 / furry 场景，图片带画师署名，支持 SFW/NSFW 分级与会话白名单。
 
+## 安装
+
+- WebUI：插件市场 → 从仓库地址安装，填 `https://github.com/Dracowyn/astrbot_plugin_ref_gallery`。
+- 手动：克隆本仓库到 AstrBot 的 `data/plugins/` 下后重启。
+
+无第三方依赖，要求 AstrBot >= 4.25。
+
 ## 图库目录
 
 位于 `data/plugin_data/astrbot_plugin_ref_gallery/gallery/`（首次启动自动创建）：
@@ -58,3 +65,16 @@ gallery/
 ## 配置
 
 见 WebUI 插件配置页：开关、冷却、署名、防重复条数、类别中文别名、nsfw 会话白名单。
+
+## 开发
+
+```bash
+# 在 AstrBot 仓库根目录运行测试
+python -m pytest data/plugins/astrbot_plugin_ref_gallery/tests -v
+```
+
+`gallery.py` 为零框架依赖的纯逻辑层，`main.py` 为插件层；测试不需要启动 bot。
+
+## License
+
+[MIT](LICENSE)
