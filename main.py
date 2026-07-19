@@ -13,8 +13,8 @@ from collections import deque
 from pathlib import Path
 
 import astrbot.api.message_components as Comp
-from astrbot.api import AstrBotConfig, logger
-from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api import AstrBotConfig, llm_tool, logger
+from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.star.filter.command import GreedyStr
 
@@ -169,3 +169,62 @@ class RefGalleryPlugin(Star):
         if isinstance(val, str):
             return val.strip().lower() not in ("", "false", "0", "no", "off")
         return bool(val)
+
+    # ------------------------------ LLM 工具 ------------------------------
+    @llm_tool("show_my_image")
+    async def llm_show_image(
+        self, event: AstrMessageEvent, category: str = "ref", keyword: str = ""
+    ):
+        """把你（bot）自己的设定图 / 约稿 / 日常照片直接发到当前会话。
+        当用户想看你的设定图、参考图、照片、约的稿子、立绘、人设时调用本工具。
+        图片会由工具直接发出，你只需根据返回结果自然地回应用户。
+
+        Args:
+            category(string): 图片类别：ref=设定图（默认）、commission=约稿、daily=日常照片。也接受中文别名如「设定图」「约稿」「照片」。
+            keyword(string): 可选筛选词，匹配标题 / 画师 / 标签 / 文件名。留空＝类别内随机。
+        """
+        if not self._cfg_bool("enabled", True) or not self._cfg_bool("llm_tool_enabled", True):
+            return "发图功能当前未启用。"
+
+        umo = event.unified_msg_origin
+        # 与指令共用冷却：防止 LLM 被诱导高频调用刷屏
+        wait = self._acquire_cooldown(umo, time.time())
+        if wait:
+            return f"发图过于频繁，请 {wait}s 后再试。"
+
+        cat = self._resolve_category(category)
+        chain, note = self._pick_chain(umo, cat, (keyword or "").strip())
+        if chain is None:
+            return note
+        try:
+            await self.context.send_message(umo, MessageChain(chain=chain))
+        except Exception as e:
+            logger.error(f"[{PLUGIN_NAME}] llm tool send failed: {e}")
+            return "图片已选好但发送失败。"
+        label = CATEGORY_LABELS.get(cat, cat)
+        return f"已发送一张{label}：{note}。请自然地回应用户。"
+
+    # ------------------------------ nsfw 开关 ------------------------------
+    def _set_nsfw(self, umo: str, enable: bool) -> str:
+        """把会话加入 / 移出 nsfw 白名单并持久化，返回回复文案。"""
+        sessions = list(self.config.get("nsfw_enabled_sessions", []) or [])
+        if enable:
+            if umo not in sessions:
+                sessions.append(umo)
+        else:
+            sessions = [s for s in sessions if s != umo]
+        self.config["nsfw_enabled_sessions"] = sessions
+        self.config.save_config()
+        return "本会话已允许 nsfw 图~" if enable else "本会话已关闭 nsfw 图。"
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("图库nsfw")
+    async def nsfw_toggle(self, event: AstrMessageEvent, switch: str = ""):
+        """图库nsfw on|off：允许 / 禁止本会话抽到 nsfw 图（管理员）。"""
+        umo = event.unified_msg_origin
+        switch = (switch or "").strip().lower()
+        if switch in ("on", "off"):
+            yield event.plain_result(self._set_nsfw(umo, switch == "on"))
+        else:
+            state = "开" if self._nsfw_allowed(umo) else "关"
+            yield event.plain_result(f"用法：图库nsfw on|off（本会话当前：{state}）")
