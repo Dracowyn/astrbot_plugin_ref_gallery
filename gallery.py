@@ -134,6 +134,47 @@ class Gallery:
                 return False
         return True
 
+    # ------------------------------ 查找 / 写回 ------------------------------
+    def find_by_name(self, name: str) -> list[ImageEntry]:
+        """按名字找图：先精确匹配相对路径；无命中再按文件名子串（不区分大小写）。"""
+        name = name.strip()
+        exact = [e for e in self._entries if e.rel_path == name]
+        if exact:
+            return exact
+        low = name.lower()
+        return [e for e in self._entries if low in Path(e.rel_path).name.lower()]
+
+    def set_meta(self, rel_path: str, **fields) -> ImageEntry:
+        """更新某图元数据并写回 manifest.json，随后重扫索引并返回新条目。
+
+        允许字段：title / artist / rating / tags。tags 可传逗号分隔字符串。
+        清单本身损坏时从空清单重建（degraded 状态下写回不吞异常）。
+        """
+        if rel_path not in {e.rel_path for e in self._entries}:
+            raise GalleryError(f"图库里没有 {rel_path}")
+        allowed = {"title", "artist", "rating", "tags"}
+        bad = set(fields) - allowed
+        if bad:
+            raise GalleryError(f"不支持的字段：{'、'.join(sorted(bad))}（可用：title/artist/rating/tags）")
+        if "rating" in fields and str(fields["rating"]).lower() not in RATINGS:
+            raise GalleryError("rating 只能是 safe 或 nsfw")
+        if "tags" in fields and isinstance(fields["tags"], str):
+            fields["tags"] = [t.strip() for t in fields["tags"].split(",") if t.strip()]
+
+        images = self._load_manifest()
+        item = dict(images.get(rel_path, {}))
+        item.update(fields)
+        images[rel_path] = item
+        self.manifest_path.write_text(
+            json.dumps({"images": images}, ensure_ascii=False, indent=2) + "\n",
+            "utf-8",
+        )
+        self.scan()
+        for e in self._entries:
+            if e.rel_path == rel_path:
+                return e
+        raise GalleryError(f"{rel_path} 在重扫后消失了，请检查图库目录")
+
 
 def build_caption(entry: ImageEntry) -> str:
     """发图附言：「标题」 by 画师；缺哪个省哪个，都没有返回空串。"""
