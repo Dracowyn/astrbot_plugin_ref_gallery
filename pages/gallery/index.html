@@ -153,6 +153,9 @@ details summary { cursor: pointer; color: var(--muted); }
 
 <div id="toast"></div>
 
+<!-- 必须显式引用并置于内联脚本之前:服务端只在页面未引用时才自动注入,
+     且注入点在 </body> 前(内联脚本之后),会导致 AstrBotPluginPage 未定义 -->
+<script src="/api/plugin/page/bridge-sdk.js"></script>
 <script>
 (function () {
   "use strict";
