@@ -175,6 +175,66 @@ class Gallery:
                 return e
         raise GalleryError(f"{rel_path} 在重扫后消失了，请检查图库目录")
 
+    # ------------------------------ 上传 / 删除 ------------------------------
+    def add_image(self, category: str, filename: str, data: bytes) -> ImageEntry:
+        """把上传的图片写入类别目录并重建索引,返回新条目。
+
+        category 必须是已存在的一级类别子目录;扩展名必须在 IMAGE_EXTS;
+        文件名净化后若重名自动追加 -1/-2…;非法输入抛 GalleryError。
+        """
+        category = (category or "").strip()
+        if not category or "/" in category or "\\" in category or category.startswith("."):
+            raise GalleryError(f"类别不存在:{category or '(空)'}")
+        cat_dir = self.root / category
+        if not cat_dir.is_dir():
+            raise GalleryError(f"类别不存在:{category}")
+        name = _sanitize_filename(filename)
+        suffix = Path(name).suffix.lower()
+        if suffix not in IMAGE_EXTS:
+            raise GalleryError(f"不支持的图片格式:{suffix or '(无扩展名)'}")
+        stem = Path(name).stem
+        target = cat_dir / name
+        counter = 0
+        while target.exists():
+            counter += 1
+            target = cat_dir / f"{stem}-{counter}{suffix}"
+        target.write_bytes(data)
+        self.scan()
+        rel = target.relative_to(self.root).as_posix()
+        for e in self._entries:
+            if e.rel_path == rel:
+                return e
+        raise GalleryError(f"{rel} 写入后未被索引,请检查图库目录")
+
+    def remove(self, rel_path: str) -> None:
+        """删除图片:删文件(容忍已不存在)、清理清单条目、重建索引。
+
+        rel_path 必须命中当前索引,否则抛 GalleryError。
+        """
+        if rel_path not in {e.rel_path for e in self._entries}:
+            raise GalleryError(f"图库里没有 {rel_path}")
+        target = self.root / rel_path
+        if target.is_file():
+            target.unlink()
+        images = self._load_manifest()
+        if rel_path in images:
+            del images[rel_path]
+            self.manifest_path.write_text(
+                json.dumps({"images": images}, ensure_ascii=False, indent=2) + "\n",
+                "utf-8",
+            )
+        self.scan()
+
+
+def _sanitize_filename(filename: str) -> str:
+    """上传文件名净化:取 basename,剔除路径分隔/控制字符/Windows 保留字符。"""
+    name = Path(filename.replace("\\", "/")).name
+    name = "".join(ch for ch in name if ch.isprintable() and ch not in '/\\:*?"<>|')
+    name = name.strip().strip(".")
+    if not name:
+        raise GalleryError("文件名无效")
+    return name
+
 
 def build_caption(entry: ImageEntry) -> str:
     """发图附言：「标题」 by 画师；缺哪个省哪个，都没有返回空串。"""
