@@ -226,7 +226,7 @@ details summary { cursor: pointer; color: var(--muted); }
     $("grid").innerHTML = items.map((it) => {
       const title = it.title || it.rel_path.split("/").pop();
       const img = it.thumb
-        ? `<img src="${it.thumb}" alt="">`
+        ? `<img src="${esc(it.thumb)}" alt="">`
         : `<div class="ph">无法预览</div>`;
       return `<div class="card" data-path="${esc(it.rel_path)}">${img}` +
         `<div class="meta"><div class="t">${esc(title)}` +
