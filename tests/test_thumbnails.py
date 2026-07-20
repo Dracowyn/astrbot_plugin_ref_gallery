@@ -58,3 +58,53 @@ def test_rgba_source_keeps_alpha_mode(tmp_path):
     entry = ImageEntry(rel_path="ref/alpha.png", abs_path=path, category="ref")
     data = thumbnails.get_thumbnail(entry, tmp_path / "thumbs")
     assert data is not None
+    with Image.open(BytesIO(data)) as im:
+        assert im.mode == "RGBA"
+
+
+def test_cache_invalidation_on_mtime_change(tmp_path):
+    """Cache key changes when source mtime changes, so old cache is skipped."""
+    entry = make_entry(tmp_path, name="evolving.png", size=(500, 500))
+    thumbs = tmp_path / "thumbs"
+    first_data = thumbnails.get_thumbnail(entry, thumbs)
+
+    # Modify the source to change mtime (or size), invalidating cache key
+    import time
+    time.sleep(0.01)  # Ensure mtime_ns differs
+    # Write a new valid PNG file with different dimensions to change both mtime and size
+    Image.new("RGB", (400, 400), (100, 200, 50)).save(entry.abs_path)
+
+    # Cache key should be different now, so we regenerate
+    second_data = thumbnails.get_thumbnail(entry, thumbs)
+    # Both succeed but may differ due to different source dimensions
+    assert first_data is not None
+    assert second_data is not None
+    # Verify two cache files exist (different keys)
+    cached = list(thumbs.glob("*.webp"))
+    assert len(cached) == 2
+
+
+def test_gif_animation_takes_first_frame(tmp_path):
+    """Verify GIF selects frame 0 (first frame) for thumbnail."""
+    path = tmp_path / "animated.gif"
+    # Create a 2-frame GIF: first frame red, second frame blue
+    frames = [
+        Image.new("RGB", (200, 200), (255, 0, 0)),  # Red frame 0
+        Image.new("RGB", (200, 200), (0, 0, 255)),  # Blue frame 1
+    ]
+    frames[0].save(path, save_all=True, append_images=[frames[1]], duration=[100, 100])
+
+    entry = ImageEntry(rel_path="ref/animated.gif", abs_path=path, category="ref")
+    data = thumbnails.get_thumbnail(entry, tmp_path / "thumbs")
+    assert data is not None
+
+    # Check that we got the red frame (frame 0), not blue frame 1
+    # Red and blue WebP should differ in their bytes
+    # Decode to verify it's a real image and not corrupted
+    with Image.open(BytesIO(data)) as im:
+        assert im.format == "WEBP"
+        # Sample a pixel to confirm it's reddish (from frame 0)
+        pixel = im.getpixel((100, 100))
+        # WebP may have slightly different colors after re-encoding, so check general hue
+        # Red frame should have high R channel
+        assert pixel[0] > pixel[2], "Should be reddish (frame 0), not blueish (frame 1)"
