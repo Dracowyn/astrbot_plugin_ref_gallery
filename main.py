@@ -8,6 +8,7 @@
 
 # 注意：本模块特意不使用 `from __future__ import annotations`。该 future 会把注解
 # 字符串化（PEP 563），使 GreedyStr 注解变成字符串，破坏框架的贪婪参数分发。
+import asyncio
 import time
 from collections import deque
 from pathlib import Path
@@ -18,6 +19,7 @@ from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.star.filter.command import GreedyStr
 
+from . import webapi
 from .gallery import Gallery, GalleryError, build_caption
 
 PLUGIN_NAME = "astrbot_plugin_ref_gallery"
@@ -37,6 +39,7 @@ class RefGalleryPlugin(Star):
         super().__init__(context, config)
         self.config = config
         self.gallery = Gallery(StarTools.get_data_dir(PLUGIN_NAME) / "gallery")
+        self.thumbs_dir = StarTools.get_data_dir(PLUGIN_NAME) / "thumbs"
         # 会话级冷却：unified_msg_origin -> 上次发图时间戳
         self._last_sent: dict[str, float] = {}
         # 会话级防重复：unified_msg_origin -> 最近发过的 rel_path
@@ -44,10 +47,33 @@ class RefGalleryPlugin(Star):
 
     # ------------------------------ 生命周期 ------------------------------
     async def initialize(self) -> None:
+        # 目录创建与首扫是同步磁盘 I/O,放线程池,避免热重载时阻塞事件循环
+        await asyncio.to_thread(self._prepare_gallery)
+        self._register_web_apis()
+        logger.info(
+            f"[{PLUGIN_NAME}] initialized, {len(self.gallery.entries)} images indexed"
+        )
+
+    def _prepare_gallery(self) -> None:
         for cat in BUILTIN_CATEGORIES:
             (self.gallery.root / cat).mkdir(parents=True, exist_ok=True)
-        added, _ = self.gallery.scan()
-        logger.info(f"[{PLUGIN_NAME}] initialized, {added} images indexed")
+        self.thumbs_dir.mkdir(parents=True, exist_ok=True)
+        self.gallery.scan()
+
+    def _register_web_apis(self) -> None:
+        """管理页后端 API;路由第一段必须是插件名(bridge 拼 /api/.../<插件名>/<endpoint>)。"""
+        prefix = f"/{PLUGIN_NAME}"
+        for route, handler, methods, desc in (
+            (f"{prefix}/overview", self._api_overview, ["GET"], "图库概览统计"),
+            (f"{prefix}/images", self._api_images, ["GET"], "图片分页列表(含缩略图)"),
+            (f"{prefix}/image", self._api_image, ["GET"], "单图全尺寸与元数据"),
+            (f"{prefix}/images/upload/<category>", self._api_upload, ["POST"], "上传图片到类别"),
+            (f"{prefix}/images/delete", self._api_delete, ["POST"], "删除图片"),
+            (f"{prefix}/images/meta", self._api_meta, ["POST"], "更新图片元数据"),
+            (f"{prefix}/rescan", self._api_rescan, ["POST"], "重扫图库"),
+            (f"{prefix}/nsfw_sessions/remove", self._api_nsfw_remove, ["POST"], "移除 nsfw 会话白名单"),
+        ):
+            self.context.register_web_api(route, handler, methods, desc)
 
     async def terminate(self) -> None:
         logger.info(f"[{PLUGIN_NAME}] terminated")
@@ -306,3 +332,28 @@ class RefGalleryPlugin(Star):
         except GalleryError as e:
             return f"标记失败：{e}"
         return f"已更新 {entry.rel_path}：{key}={value}"
+
+    # ------------------------------ Web API 薄委托 ------------------------------
+    async def _api_overview(self) -> dict:
+        return await webapi.handle_overview(self)
+
+    async def _api_images(self) -> dict:
+        return await webapi.handle_images(self)
+
+    async def _api_image(self) -> dict:
+        return await webapi.handle_image(self)
+
+    async def _api_upload(self, category: str) -> dict:
+        return await webapi.handle_upload(self, category)
+
+    async def _api_delete(self) -> dict:
+        return await webapi.handle_delete(self)
+
+    async def _api_meta(self) -> dict:
+        return await webapi.handle_meta(self)
+
+    async def _api_rescan(self) -> dict:
+        return await webapi.handle_rescan(self)
+
+    async def _api_nsfw_remove(self) -> dict:
+        return await webapi.handle_nsfw_remove(self)
