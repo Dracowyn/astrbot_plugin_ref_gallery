@@ -23,3 +23,20 @@ def test_bridge_sdk_included_before_inline_script():
 def test_no_external_urls():
     html = PAGE.read_text("utf-8")
     assert "http://" not in html and "https://" not in html
+
+
+def test_no_dynamic_src_href_literals_for_asset_rewriter():
+    """页面源码里的 src=/href= 字面量只允许静态的 bridge-sdk 引用。
+
+    服务端发页面时会用 _HTML_ASSET_ATTR_RE 重写整个 HTML 文本里的
+    src/href 属性——包括内联 JS 模板字符串。动态值(如缩略图 data URI)
+    必须用 DOM 属性赋值(el.src = ...)注入,否则模板占位符会在 serve 时
+    被改写成废的资产 URL(v0.2.0 真机验收踩到的坑:缩略图全部破图)。
+    """
+    from astrbot.dashboard.services.plugin_page_service import _HTML_ASSET_ATTR_RE
+
+    html = PAGE.read_text("utf-8")
+    urls = [m.group("url") for m in _HTML_ASSET_ATTR_RE.finditer(html)]
+    assert urls == ["/api/plugin/page/bridge-sdk.js"], (
+        f"发现会被服务端资产重写误伤的 src/href 字面量:{urls!r}"
+    )

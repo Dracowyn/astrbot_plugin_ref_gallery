@@ -226,17 +226,22 @@ details summary { cursor: pointer; color: var(--muted); }
 
   function renderGrid(items) {
     $("empty").style.display = items.length ? "none" : "block";
+    // 注意:缩略图不能在模板串里写成带引号的 src 属性字面量——服务端发页面时
+    // 会重写 HTML 文本里所有 src/href 属性(含内联脚本),模板占位符会被改写成
+    // 废的资产 URL。改为渲染后用 DOM 属性赋值(im.src = ...)注入 data URI。
     $("grid").innerHTML = items.map((it) => {
       const title = it.title || it.rel_path.split("/").pop();
-      const img = it.thumb
-        ? `<img src="${esc(it.thumb)}" alt="">`
-        : `<div class="ph">无法预览</div>`;
+      const img = it.thumb ? `<img alt="">` : `<div class="ph">无法预览</div>`;
       return `<div class="card" data-path="${esc(it.rel_path)}">${img}` +
         `<div class="meta"><div class="t">${esc(title)}` +
         `${it.rating === "nsfw" ? '<span class="badge">nsfw</span>' : ""}</div>` +
         `<div class="a">${esc(it.artist || it.category)}</div></div></div>`;
     }).join("");
+    const byPath = new Map(items.map((it) => [it.rel_path, it]));
     $("grid").querySelectorAll(".card").forEach((card) => {
+      const it = byPath.get(card.dataset.path);
+      const im = card.querySelector("img");
+      if (im && it && it.thumb) im.src = it.thumb;
       card.onclick = () => openDetail(card.dataset.path);
     });
   }
