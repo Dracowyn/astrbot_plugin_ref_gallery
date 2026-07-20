@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>设定图库管理</title>
+<style>
+:root {
+  --bg: #f5f6f8; --card: #ffffff; --text: #1f2329; --muted: #8a94a6;
+  --border: #e5e8ee; --accent: #4f7cff; --accent-weak: rgba(79,124,255,.12);
+  --danger: #e5484d; --ok: #30a46c;
+}
+[data-theme="dark"] {
+  --bg: #17181c; --card: #1f2126; --text: #e6e8ec; --muted: #9aa3b2;
+  --border: #2c3038; --accent: #6b93ff; --accent-weak: rgba(107,147,255,.16);
+  --danger: #ff6369; --ok: #3dd68c;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  padding: 16px; min-height: 100vh;
+}
+h1 { font-size: 18px; margin-bottom: 12px; }
+.stats { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.stat {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 16px; min-width: 96px;
+}
+.stat b { display: block; font-size: 20px; }
+.stat span { color: var(--muted); font-size: 12px; }
+.warn {
+  background: rgba(229,72,77,.1); border: 1px solid var(--danger); color: var(--danger);
+  border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; display: none;
+}
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab {
+  border: 1px solid var(--border); background: var(--card); color: var(--text);
+  border-radius: 999px; padding: 4px 14px; cursor: pointer; font-size: 13px;
+}
+.tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+input[type="text"], select {
+  background: var(--card); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 10px; font-size: 13px; outline: none;
+}
+input[type="text"]:focus { border-color: var(--accent); }
+button {
+  background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+  padding: 7px 14px; font-size: 13px; cursor: pointer;
+}
+button.ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+button.danger { background: var(--danger); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px; margin-bottom: 14px;
+}
+.card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  overflow: hidden; cursor: pointer; transition: border-color .15s;
+}
+.card:hover { border-color: var(--accent); }
+.card .ph, .card img { width: 100%; height: 130px; object-fit: cover; display: block; }
+.card .ph {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); background: var(--accent-weak); font-size: 12px;
+}
+.card .meta { padding: 8px 10px; }
+.card .meta .t { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .meta .a { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge {
+  display: inline-block; background: var(--danger); color: #fff;
+  font-size: 11px; border-radius: 4px; padding: 0 6px; margin-left: 4px;
+}
+.pager { display: flex; gap: 8px; align-items: center; justify-content: center; margin-bottom: 16px; }
+.empty { color: var(--muted); text-align: center; padding: 40px 0; }
+details {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 14px; margin-bottom: 16px;
+}
+details summary { cursor: pointer; color: var(--muted); }
+.nsfw-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; gap: 8px; }
+.nsfw-row code { font-size: 12px; word-break: break-all; }
+.modal-mask {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55);
+  align-items: center; justify-content: center; padding: 20px; z-index: 10;
+}
+.modal {
+  background: var(--card); border-radius: 12px; max-width: 860px; width: 100%;
+  max-height: 92vh; overflow: auto; padding: 16px;
+}
+.modal img { max-width: 100%; max-height: 52vh; display: block; margin: 0 auto 12px; border-radius: 8px; }
+.form { display: grid; grid-template-columns: 64px 1fr; gap: 8px 10px; align-items: center; margin-bottom: 12px; }
+.form label { color: var(--muted); font-size: 13px; }
+.modal .path { color: var(--muted); font-size: 12px; word-break: break-all; margin-bottom: 10px; }
+.modal .actions { display: flex; gap: 8px; justify-content: flex-end; }
+#toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  background: var(--card); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 16px; display: none; z-index: 20; max-width: 80vw;
+}
+#toast.err { border-color: var(--danger); color: var(--danger); }
+</style>
+</head>
+<body>
+<h1>设定图库管理</h1>
+
+<div class="stats" id="stats"></div>
+<div class="warn" id="degradedWarn">⚠ manifest.json 解析失败,已降级为纯目录模式——请检查清单文件语法。</div>
+
+<div class="toolbar">
+  <div class="tabs" id="tabs"></div>
+  <input type="text" id="kw" placeholder="搜标题 / 画师 / 标签 / 文件名" style="flex:1;min-width:160px">
+  <select id="rating">
+    <option value="all">全部分级</option>
+    <option value="safe">仅 safe</option>
+    <option value="nsfw">仅 nsfw</option>
+  </select>
+  <select id="uploadCat"></select>
+  <button class="ghost" id="uploadBtn">上传图片</button>
+  <input type="file" id="filePick" accept=".png,.jpg,.jpeg,.gif,.webp" multiple hidden>
+  <button class="ghost" id="rescanBtn">重扫图库</button>
+</div>
+
+<div class="grid" id="grid"></div>
+<div class="empty" id="empty" style="display:none">这一类还没有图~ 把图上传进来或扔到图库目录里吧。</div>
+<div class="pager" id="pager"></div>
+
+<details id="nsfwBox">
+  <summary>nsfw 会话白名单(<span id="nsfwCount">0</span>)</summary>
+  <div id="nsfwList"></div>
+</details>
+
+<div class="modal-mask" id="mask">
+  <div class="modal">
+    <img id="mImg" alt="">
+    <div class="path" id="mPath"></div>
+    <div class="form">
+      <label>标题</label><input type="text" id="mTitle">
+      <label>画师</label><input type="text" id="mArtist">
+      <label>标签</label><input type="text" id="mTags" placeholder="逗号分隔">
+      <label>分级</label>
+      <select id="mRating"><option value="safe">safe</option><option value="nsfw">nsfw</option></select>
+    </div>
+    <div class="actions">
+      <button class="danger" id="mDelete">删除</button>
+      <button class="ghost" id="mClose">关闭</button>
+      <button id="mSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+  const Bridge = window.AstrBotPluginPage;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  const state = { category: "", keyword: "", rating: "all", page: 1, pageSize: 40, total: 0 };
+  let overview = null;
+  let detailPath = null;
+  let toastTimer = null;
+
+  function toast(msg, isErr) {
+    const el = $("toast");
+    el.textContent = msg;
+    el.className = isErr ? "err" : "";
+    el.style.display = "block";
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.style.display = "none"; }, 2600);
+  }
+
+  function renderStats() {
+    const cats = Object.entries(overview.categories)
+      .map(([k, v]) => `<div class="stat"><b>${v}</b><span>${esc(k)}</span></div>`).join("");
+    $("stats").innerHTML =
+      `<div class="stat"><b>${overview.total}</b><span>总数</span></div>` + cats +
+      `<div class="stat"><b>${overview.nsfw_count}</b><span>nsfw</span></div>` +
+      `<div class="stat"><b>${overview.coverage_pct}%</b><span>清单覆盖率</span></div>`;
+    $("degradedWarn").style.display = overview.degraded ? "block" : "none";
+  }
+
+  function renderTabs() {
+    const names = ["", ...Object.keys(overview.categories).sort()];
+    $("tabs").innerHTML = names.map((c) =>
+      `<button class="tab${state.category === c ? " active" : ""}" data-cat="${esc(c)}">` +
+      `${c ? esc(c) : "全部"}</button>`).join("");
+    $("tabs").querySelectorAll(".tab").forEach((btn) => {
+      btn.onclick = () => { state.category = btn.dataset.cat; state.page = 1; refresh(); };
+    });
+    const cats = Object.keys(overview.categories).sort();
+    const options = (cats.length ? cats : ["ref", "commission", "daily"])
+      .map((c) => `<option value="${esc(c)}">上传到 ${esc(c)}</option>`).join("");
+    const prev = $("uploadCat").value;
+    $("uploadCat").innerHTML = options;
+    if (prev) $("uploadCat").value = prev;
+  }
+
+  function renderNsfw() {
+    const list = overview.nsfw_sessions;
+    $("nsfwCount").textContent = list.length;
+    $("nsfwList").innerHTML = list.length
+      ? list.map((u) =>
+          `<div class="nsfw-row"><code>${esc(u)}</code>` +
+          `<button class="ghost" data-umo="${esc(u)}">移除</button></div>`).join("")
+      : '<div class="empty" style="padding:12px 0">没有开启 nsfw 的会话。</div>';
+    $("nsfwList").querySelectorAll("button").forEach((btn) => {
+      btn.onclick = async () => {
+        try {
+          const data = await Bridge.apiPost("nsfw_sessions/remove", { umo: btn.dataset.umo });
+          overview.nsfw_sessions = data.nsfw_sessions;
+          renderNsfw();
+          toast("已移除");
+        } catch (e) { toast(e.message, true); }
+      };
+    });
+  }
+
+  function renderGrid(items) {
+    $("empty").style.display = items.length ? "none" : "block";
+    $("grid").innerHTML = items.map((it) => {
+      const title = it.title || it.rel_path.split("/").pop();
+      const img = it.thumb
+        ? `<img src="${it.thumb}" alt="">`
+        : `<div class="ph">无法预览</div>`;
+      return `<div class="card" data-path="${esc(it.rel_path)}">${img}` +
+        `<div class="meta"><div class="t">${esc(title)}` +
+        `${it.rating === "nsfw" ? '<span class="badge">nsfw</span>' : ""}</div>` +
+        `<div class="a">${esc(it.artist || it.category)}</div></div></div>`;
+    }).join("");
+    $("grid").querySelectorAll(".card").forEach((card) => {
+      card.onclick = () => openDetail(card.dataset.path);
+    });
+  }
+
+  function renderPager() {
+    const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
+    $("pager").innerHTML = pages > 1
+      ? `<button class="ghost" id="pPrev" ${state.page <= 1 ? "disabled" : ""}>上一页</button>` +
+        `<span>第 ${state.page} / ${pages} 页(共 ${state.total} 张)</span>` +
+        `<button class="ghost" id="pNext" ${state.page >= pages ? "disabled" : ""}>下一页</button>`
+      : "";
+    const prev = $("pPrev"), next = $("pNext");
+    if (prev) prev.onclick = () => { state.page -= 1; loadImages(); };
+    if (next) next.onclick = () => { state.page += 1; loadImages(); };
+  }
+
+  async function loadOverview() {
+    overview = await Bridge.apiGet("overview");
+    renderStats(); renderTabs(); renderNsfw();
+  }
+
+  async function loadImages() {
+    const params = { page: state.page, page_size: state.pageSize, rating: state.rating };
+    if (state.category) params.category = state.category;
+    if (state.keyword) params.keyword = state.keyword;
+    const data = await Bridge.apiGet("images", params);
+    state.total = data.total;
+    renderGrid(data.items); renderPager();
+  }
+
+  async function refresh() {
+    try { await loadOverview(); await loadImages(); }
+    catch (e) { toast(e.message, true); }
+  }
+
+  async function openDetail(relPath) {
+    try {
+      const d = await Bridge.apiGet("image", { path: relPath });
+      detailPath = relPath;
+      $("mImg").src = d.data_uri;
+      $("mPath").textContent = `${d.rel_path} · ${(d.size_bytes / 1024).toFixed(0)} KB`;
+      $("mTitle").value = d.title;
+      $("mArtist").value = d.artist;
+      $("mTags").value = d.tags.join(", ");
+      $("mRating").value = d.rating;
+      $("mask").style.display = "flex";
+    } catch (e) { toast(e.message, true); }
+  }
+
+  function closeDetail() {
+    $("mask").style.display = "none";
+    $("mImg").src = "";
+    detailPath = null;
+  }
+
+  async function saveMeta() {
+    try {
+      await Bridge.apiPost("images/meta", {
+        path: detailPath,
+        title: $("mTitle").value.trim(),
+        artist: $("mArtist").value.trim(),
+        tags: $("mTags").value.trim(),
+        rating: $("mRating").value,
+      });
+      toast("已保存");
+      closeDetail();
+      refresh();
+    } catch (e) { toast(e.message, true); }
+  }
+
+  async function deleteImage() {
+    if (!window.confirm(`确定删除 ${detailPath} ?此操作不可恢复。`)) return;
+    try {
+      await Bridge.apiPost("images/delete", { path: detailPath });
+      toast("已删除");
+      closeDetail();
+      refresh();
+    } catch (e) { toast(e.message, true); }
+  }
+
+  async function uploadFiles(fileList) {
+    const cat = $("uploadCat").value;
+    let done = 0;
+    for (const file of fileList) {
+      try {
+        await Bridge.upload(`images/upload/${encodeURIComponent(cat)}`, file);
+        done += 1;
+      } catch (e) {
+        toast(`${file.name} 上传失败:${e.message}`, true);
+      }
+    }
+    if (done) toast(`已上传 ${done} 张到 ${cat}`);
+    refresh();
+  }
+
+  async function rescan() {
+    $("rescanBtn").disabled = true;
+    try {
+      const r = await Bridge.apiPost("rescan", {});
+      toast(`重扫完成:共 ${r.total} 张,新增 ${r.added},移除 ${r.removed}`);
+      refresh();
+    } catch (e) { toast(e.message, true); }
+    finally { $("rescanBtn").disabled = false; }
+  }
+
+  let kwTimer = null;
+  $("kw").addEventListener("input", () => {
+    clearTimeout(kwTimer);
+    kwTimer = setTimeout(() => {
+      state.keyword = $("kw").value.trim();
+      state.page = 1;
+      loadImages().catch((e) => toast(e.message, true));
+    }, 300);
+  });
+  $("rating").addEventListener("change", () => {
+    state.rating = $("rating").value;
+    state.page = 1;
+    loadImages().catch((e) => toast(e.message, true));
+  });
+  $("uploadBtn").onclick = () => $("filePick").click();
+  $("filePick").addEventListener("change", () => {
+    if ($("filePick").files.length) uploadFiles([...$("filePick").files]);
+    $("filePick").value = "";
+  });
+  $("rescanBtn").onclick = rescan;
+  $("mClose").onclick = closeDetail;
+  $("mSave").onclick = saveMeta;
+  $("mDelete").onclick = deleteImage;
+  $("mask").addEventListener("click", (e) => { if (e.target === $("mask")) closeDetail(); });
+
+  if (!Bridge) {
+    toast("页面桥不可用:请通过 AstrBot WebUI 打开本页", true);
+    return;
+  }
+  Bridge.ready().then(refresh).catch(refresh);
+})();
+</script>
+</body>
+</html>
