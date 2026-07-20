@@ -93,3 +93,17 @@ def test_scan_missing_root_yields_empty(tmp_path):
     g = Gallery(tmp_path / "不存在")
     assert g.scan() == (0, 0)
     assert g.entries == ()
+
+
+def test_category_dirs_includes_empty_dirs(gallery_root):
+    (gallery_root / "extra").mkdir()          # 空类别目录
+    (gallery_root / ".hidden").mkdir()        # 隐藏目录应被忽略
+    g = Gallery(gallery_root)
+    g.scan()
+    # daily 目录里只有非图片文件,categories() 不含它,但 category_dirs() 必须含
+    assert g.category_dirs() == ["commission", "daily", "extra", "ref"]
+    assert "daily" not in g.categories()
+
+
+def test_category_dirs_missing_root(tmp_path):
+    assert Gallery(tmp_path / "不存在").category_dirs() == []

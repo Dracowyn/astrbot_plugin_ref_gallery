@@ -34,6 +34,7 @@ def test_overview_data_structure(plugin):
     data = webapi.overview_data(plugin)
     assert data["total"] == 2
     assert data["categories"] == {"ref": 1, "commission": 1}
+    assert data["category_dirs"] == ["commission", "ref"]  # 含空目录、升序
     assert data["nsfw_count"] == 1
     assert data["coverage_pct"] == 50
     assert data["degraded"] is False

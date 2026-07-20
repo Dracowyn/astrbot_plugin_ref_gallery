@@ -189,15 +189,19 @@ details summary { cursor: pointer; color: var(--muted); }
   }
 
   function renderTabs() {
-    const names = ["", ...Object.keys(overview.categories).sort()];
+    // 类别列表用 category_dirs(含空目录)——categories 只含有图的类别,
+    // 若用它驱动上传下拉,空类别目录将永远无法被选为上传目标
+    const dirs = (overview.category_dirs && overview.category_dirs.length)
+      ? overview.category_dirs
+      : Object.keys(overview.categories).sort();
+    const names = ["", ...dirs];
     $("tabs").innerHTML = names.map((c) =>
       `<button class="tab${state.category === c ? " active" : ""}" data-cat="${esc(c)}">` +
       `${c ? esc(c) : "全部"}</button>`).join("");
     $("tabs").querySelectorAll(".tab").forEach((btn) => {
       btn.onclick = () => { state.category = btn.dataset.cat; state.page = 1; refresh(); };
     });
-    const cats = Object.keys(overview.categories).sort();
-    const options = (cats.length ? cats : ["ref", "commission", "daily"])
+    const options = (dirs.length ? dirs : ["ref", "commission", "daily"])
       .map((c) => `<option value="${esc(c)}">上传到 ${esc(c)}</option>`).join("");
     const prev = $("uploadCat").value;
     $("uploadCat").innerHTML = options;

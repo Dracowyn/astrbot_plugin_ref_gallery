@@ -103,6 +103,20 @@ class Gallery:
             out[e.category] = out.get(e.category, 0) + 1
         return out
 
+    def category_dirs(self) -> list[str]:
+        """图库根下的一级类别目录名（含空目录，升序）——上传的合法目标集合。
+
+        与 categories() 的区别：后者按索引统计、不含空类别；上传选择器
+        必须用本方法，否则空目录类别永远无法被选中。
+        """
+        if not self.root.is_dir():
+            return []
+        return sorted(
+            p.name
+            for p in self.root.iterdir()
+            if p.is_dir() and not p.name.startswith(".")
+        )
+
     # ------------------------------ 抽取 ------------------------------
     def pick(
         self,

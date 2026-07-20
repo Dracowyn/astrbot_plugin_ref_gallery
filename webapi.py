@@ -49,6 +49,7 @@ def overview_data(plugin: "RefGalleryPlugin") -> dict:
     return {
         "total": len(entries),
         "categories": plugin.gallery.categories(),
+        "category_dirs": plugin.gallery.category_dirs(),
         "nsfw_count": sum(1 for e in entries if e.rating == "nsfw"),
         "coverage_pct": round(with_meta * 100 / len(entries)) if entries else 0,
         "degraded": plugin.gallery.manifest_degraded,
