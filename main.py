@@ -8,6 +8,7 @@
 
 # 注意：本模块特意不使用 `from __future__ import annotations`。该 future 会把注解
 # 字符串化（PEP 563），使 GreedyStr 注解变成字符串，破坏框架的贪婪参数分发。
+import asyncio
 import time
 from collections import deque
 from pathlib import Path
@@ -18,6 +19,7 @@ from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.star.filter.command import GreedyStr
 
+from . import webapi
 from .gallery import Gallery, GalleryError, build_caption
 
 PLUGIN_NAME = "astrbot_plugin_ref_gallery"
@@ -37,6 +39,7 @@ class RefGalleryPlugin(Star):
         super().__init__(context, config)
         self.config = config
         self.gallery = Gallery(StarTools.get_data_dir(PLUGIN_NAME) / "gallery")
+        self.thumbs_dir = StarTools.get_data_dir(PLUGIN_NAME) / "thumbs"
         # 会话级冷却：unified_msg_origin -> 上次发图时间戳
         self._last_sent: dict[str, float] = {}
         # 会话级防重复：unified_msg_origin -> 最近发过的 rel_path
@@ -44,10 +47,43 @@ class RefGalleryPlugin(Star):
 
     # ------------------------------ 生命周期 ------------------------------
     async def initialize(self) -> None:
+        # 目录创建与首扫是同步磁盘 I/O,放线程池,避免热重载时阻塞事件循环
+        await asyncio.to_thread(self._prepare_gallery)
+        self._register_web_apis()
+        logger.info(
+            f"[{PLUGIN_NAME}] initialized, {len(self.gallery.entries)} images indexed"
+        )
+
+    def _prepare_gallery(self) -> None:
         for cat in BUILTIN_CATEGORIES:
             (self.gallery.root / cat).mkdir(parents=True, exist_ok=True)
-        added, _ = self.gallery.scan()
-        logger.info(f"[{PLUGIN_NAME}] initialized, {added} images indexed")
+        self.thumbs_dir.mkdir(parents=True, exist_ok=True)
+        self.gallery.scan()
+
+    def _register_web_apis(self) -> None:
+        """管理页后端 API;路由第一段必须是插件名(bridge 拼 /api/.../<插件名>/<endpoint>)。"""
+        prefix = f"/{PLUGIN_NAME}"
+        for route, handler, methods, desc in (
+            (f"{prefix}/overview", self._api_overview, ["GET"], "图库概览统计"),
+            (f"{prefix}/images", self._api_images, ["GET"], "图片分页列表(含缩略图)"),
+            (f"{prefix}/image", self._api_image, ["GET"], "单图全尺寸与元数据"),
+            (
+                f"{prefix}/images/upload/<category>",
+                self._api_upload,
+                ["POST"],
+                "上传图片到类别",
+            ),
+            (f"{prefix}/images/delete", self._api_delete, ["POST"], "删除图片"),
+            (f"{prefix}/images/meta", self._api_meta, ["POST"], "更新图片元数据"),
+            (f"{prefix}/rescan", self._api_rescan, ["POST"], "重扫图库"),
+            (
+                f"{prefix}/nsfw_sessions/remove",
+                self._api_nsfw_remove,
+                ["POST"],
+                "移除 nsfw 会话白名单",
+            ),
+        ):
+            self.context.register_web_api(route, handler, methods, desc)
 
     async def terminate(self) -> None:
         logger.info(f"[{PLUGIN_NAME}] terminated")
@@ -81,7 +117,9 @@ class RefGalleryPlugin(Star):
         yield event.chain_result(chain)
 
     # ------------------------------ 抽图核心 ------------------------------
-    def _pick_chain(self, umo: str, category: str, keyword: str) -> tuple[list | None, str]:
+    def _pick_chain(
+        self, umo: str, category: str, keyword: str
+    ) -> tuple[list | None, str]:
         """抽一张图。成功返回 (消息链, 说明文字)；失败返回 (None, 用户可读提示)。
 
         说明文字 = 附言（有元数据时）或文件名，供 LLM 工具向模型描述发了什么。
@@ -89,16 +127,20 @@ class RefGalleryPlugin(Star):
         allow_nsfw = self._nsfw_allowed(umo)
         recent = self._recent_deque(umo)
         entry = self.gallery.pick(
-            category=category, keyword=keyword,
-            allow_nsfw=allow_nsfw, exclude=set(recent),
+            category=category,
+            keyword=keyword,
+            allow_nsfw=allow_nsfw,
+            exclude=set(recent),
         )
         if entry is not None and not entry.abs_path.is_file():
             # 索引后文件被人工移走：重扫一次再试
             logger.warning(f"[{PLUGIN_NAME}] {entry.rel_path} 不在磁盘上，触发重扫")
             self.gallery.scan()
             entry = self.gallery.pick(
-                category=category, keyword=keyword,
-                allow_nsfw=allow_nsfw, exclude=set(recent),
+                category=category,
+                keyword=keyword,
+                allow_nsfw=allow_nsfw,
+                exclude=set(recent),
             )
         if entry is None:
             label = CATEGORY_LABELS.get(category, category)
@@ -183,7 +225,9 @@ class RefGalleryPlugin(Star):
             category(string): 图片类别：ref=设定图（默认）、commission=约稿、daily=日常照片。也接受中文别名如「设定图」「约稿」「照片」。
             keyword(string): 可选筛选词，匹配标题 / 画师 / 标签 / 文件名。留空＝类别内随机。
         """
-        if not self._cfg_bool("enabled", True) or not self._cfg_bool("llm_tool_enabled", True):
+        if not self._cfg_bool("enabled", True) or not self._cfg_bool(
+            "llm_tool_enabled", True
+        ):
             return "发图功能当前未启用。"
 
         umo = event.unified_msg_origin
@@ -236,13 +280,17 @@ class RefGalleryPlugin(Star):
         """重扫图库：重新扫描目录 + 重读清单（管理员）。"""
         added, removed = self.gallery.scan()
         total = len(self.gallery.entries)
-        yield event.plain_result(f"重扫完成：共 {total} 张，新增 {added}，移除 {removed}。")
+        yield event.plain_result(
+            f"重扫完成：共 {total} 张，新增 {added}，移除 {removed}。"
+        )
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("图库状态")
     async def status(self, event: AstrMessageEvent):
         """图库状态：各类别张数、nsfw 数、清单覆盖率（管理员）。"""
-        yield event.plain_result("\n".join(self._status_lines(event.unified_msg_origin)))
+        yield event.plain_result(
+            "\n".join(self._status_lines(event.unified_msg_origin))
+        )
 
     def _status_lines(self, umo: str) -> list[str]:
         entries = self.gallery.entries
@@ -273,14 +321,16 @@ class RefGalleryPlugin(Star):
             return
         e = matches[0]
         yield event.plain_result(
-            "\n".join([
-                e.rel_path,
-                f"  类别：{e.category}",
-                f"  标题：{e.title or '（无）'}",
-                f"  画师：{e.artist or '（无）'}",
-                f"  标签：{'、'.join(e.tags) or '（无）'}",
-                f"  分级：{e.rating}",
-            ])
+            "\n".join(
+                [
+                    e.rel_path,
+                    f"  类别：{e.category}",
+                    f"  标题：{e.title or '（无）'}",
+                    f"  画师：{e.artist or '（无）'}",
+                    f"  标签：{'、'.join(e.tags) or '（无）'}",
+                    f"  分级：{e.rating}",
+                ]
+            )
         )
 
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -306,3 +356,28 @@ class RefGalleryPlugin(Star):
         except GalleryError as e:
             return f"标记失败：{e}"
         return f"已更新 {entry.rel_path}：{key}={value}"
+
+    # ------------------------------ Web API 薄委托 ------------------------------
+    async def _api_overview(self):
+        return await webapi.handle_overview(self)
+
+    async def _api_images(self):
+        return await webapi.handle_images(self)
+
+    async def _api_image(self):
+        return await webapi.handle_image(self)
+
+    async def _api_upload(self, category: str):
+        return await webapi.handle_upload(self, category)
+
+    async def _api_delete(self):
+        return await webapi.handle_delete(self)
+
+    async def _api_meta(self):
+        return await webapi.handle_meta(self)
+
+    async def _api_rescan(self):
+        return await webapi.handle_rescan(self)
+
+    async def _api_nsfw_remove(self):
+        return await webapi.handle_nsfw_remove(self)
