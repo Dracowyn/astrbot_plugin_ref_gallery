@@ -25,6 +25,20 @@ def test_no_external_urls():
     assert "http://" not in html and "https://" not in html
 
 
+def test_no_native_modal_dialogs():
+    """页面不得调用原生阻塞弹窗(confirm/alert/prompt)。
+
+    插件页面 iframe 的 sandbox 为 allow-scripts allow-forms allow-downloads,
+    不含 allow-modals——原生弹窗会被浏览器静默忽略(confirm 恒返回 false),
+    删除确认等流程会永远走不通(v0.2.0 真机验收踩到的坑)。
+    """
+    import re
+
+    html = PAGE.read_text("utf-8")
+    hits = re.findall(r"\b(?:window\s*\.\s*)?(?:confirm|alert|prompt)\s*\(", html)
+    assert not hits, f"发现原生弹窗调用:{hits!r},请改用页面内确认交互"
+
+
 def test_no_dynamic_src_href_literals_for_asset_rewriter():
     """页面源码里的 src=/href= 字面量只允许静态的 bridge-sdk 引用。
 

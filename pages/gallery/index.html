@@ -287,11 +287,23 @@ details summary { cursor: pointer; color: var(--muted); }
       $("mArtist").value = d.artist;
       $("mTags").value = d.tags.join(", ");
       $("mRating").value = d.rating;
+      disarmDelete();
       $("mask").style.display = "flex";
     } catch (e) { toast(e.message, true); }
   }
 
+  let deleteArmTimer = 0;
+
+  function disarmDelete() {
+    if (deleteArmTimer) {
+      clearTimeout(deleteArmTimer);
+      deleteArmTimer = 0;
+    }
+    $("mDelete").textContent = "删除";
+  }
+
   function closeDetail() {
+    disarmDelete();
     $("mask").style.display = "none";
     $("mImg").src = "";
     detailPath = null;
@@ -313,7 +325,13 @@ details summary { cursor: pointer; color: var(--muted); }
   }
 
   async function deleteImage() {
-    if (!window.confirm(`确定删除 ${detailPath} ?此操作不可恢复。`)) return;
+    // iframe sandbox 不含 allow-modals,原生弹窗会被静默忽略——用按钮二次确认
+    if (!deleteArmTimer) {
+      $("mDelete").textContent = "确认删除?";
+      deleteArmTimer = setTimeout(disarmDelete, 3000);
+      return;
+    }
+    disarmDelete();
     try {
       await Bridge.apiPost("images/delete", { path: detailPath });
       toast("已删除");
