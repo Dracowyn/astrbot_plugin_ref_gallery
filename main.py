@@ -334,26 +334,26 @@ class RefGalleryPlugin(Star):
         return f"已更新 {entry.rel_path}：{key}={value}"
 
     # ------------------------------ Web API 薄委托 ------------------------------
-    async def _api_overview(self) -> dict:
+    async def _api_overview(self):
         return await webapi.handle_overview(self)
 
-    async def _api_images(self) -> dict:
+    async def _api_images(self):
         return await webapi.handle_images(self)
 
-    async def _api_image(self) -> dict:
+    async def _api_image(self):
         return await webapi.handle_image(self)
 
-    async def _api_upload(self, category: str) -> dict:
+    async def _api_upload(self, category: str):
         return await webapi.handle_upload(self, category)
 
-    async def _api_delete(self) -> dict:
+    async def _api_delete(self):
         return await webapi.handle_delete(self)
 
-    async def _api_meta(self) -> dict:
+    async def _api_meta(self):
         return await webapi.handle_meta(self)
 
-    async def _api_rescan(self) -> dict:
+    async def _api_rescan(self):
         return await webapi.handle_rescan(self)
 
-    async def _api_nsfw_remove(self) -> dict:
+    async def _api_nsfw_remove(self):
         return await webapi.handle_nsfw_remove(self)

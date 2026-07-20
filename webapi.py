@@ -56,7 +56,7 @@ def overview_data(plugin: "RefGalleryPlugin") -> dict:
     }
 
 
-async def handle_overview(plugin: "RefGalleryPlugin") -> dict:
+async def handle_overview(plugin: "RefGalleryPlugin"):
     return _ok(overview_data(plugin))
 
 
@@ -95,7 +95,7 @@ def list_images_data(
     return {"total": total, "page": page, "page_size": page_size, "items": items}
 
 
-async def handle_images(plugin: "RefGalleryPlugin") -> dict:
+async def handle_images(plugin: "RefGalleryPlugin"):
     q = request.query
     data = await asyncio.to_thread(
         list_images_data,
@@ -124,7 +124,7 @@ def image_detail_data(plugin: "RefGalleryPlugin", rel_path: str) -> dict:
     }
 
 
-async def handle_image(plugin: "RefGalleryPlugin") -> dict:
+async def handle_image(plugin: "RefGalleryPlugin"):
     rel_path = (request.query.get("path", "") or "").strip()
     try:
         data = await asyncio.to_thread(image_detail_data, plugin, rel_path)
@@ -134,7 +134,7 @@ async def handle_image(plugin: "RefGalleryPlugin") -> dict:
 
 
 # ------------------------------ 上传 / 删除 / 元数据 ------------------------------
-async def handle_upload(plugin: "RefGalleryPlugin", category: str) -> dict:
+async def handle_upload(plugin: "RefGalleryPlugin", category: str):
     files = await request.files()
     file = files.get("file")
     if file is None:
@@ -158,7 +158,7 @@ def delete_image_data(plugin: "RefGalleryPlugin", rel_path: str) -> dict:
     return {"removed": rel_path, "total": len(plugin.gallery.entries)}
 
 
-async def handle_delete(plugin: "RefGalleryPlugin") -> dict:
+async def handle_delete(plugin: "RefGalleryPlugin"):
     body = await request.json({}) or {}
     rel_path = str(body.get("path", "") or "").strip()
     try:
@@ -172,7 +172,7 @@ def update_meta_data(plugin: "RefGalleryPlugin", rel_path: str, fields: dict) ->
     return _entry_dict(plugin.gallery.set_meta(rel_path, **fields))
 
 
-async def handle_meta(plugin: "RefGalleryPlugin") -> dict:
+async def handle_meta(plugin: "RefGalleryPlugin"):
     body = await request.json({}) or {}
     rel_path = str(body.get("path", "") or "").strip()
     fields = {k: body[k] for k in ("title", "artist", "rating", "tags") if k in body}
@@ -186,12 +186,12 @@ async def handle_meta(plugin: "RefGalleryPlugin") -> dict:
 
 
 # ------------------------------ 维护 ------------------------------
-async def handle_rescan(plugin: "RefGalleryPlugin") -> dict:
+async def handle_rescan(plugin: "RefGalleryPlugin"):
     added, removed = await asyncio.to_thread(plugin.gallery.scan)
     return _ok({"added": added, "removed": removed, "total": len(plugin.gallery.entries)})
 
 
-async def handle_nsfw_remove(plugin: "RefGalleryPlugin") -> dict:
+async def handle_nsfw_remove(plugin: "RefGalleryPlugin"):
     body = await request.json({}) or {}
     umo = str(body.get("umo", "") or "").strip()
     if not umo:
