@@ -50,7 +50,9 @@ class Gallery:
                     if not f.is_file() or f.suffix.lower() not in IMAGE_EXTS:
                         continue
                     rel = f.relative_to(self.root).as_posix()
-                    entries.append(self._build_entry(rel, f, cat_dir.name, meta.get(rel, {})))
+                    entries.append(
+                        self._build_entry(rel, f, cat_dir.name, meta.get(rel, {}))
+                    )
         self._entries = entries
         new = {e.rel_path for e in entries}
         return len(new - old), len(old - new)
@@ -110,7 +112,9 @@ class Gallery:
         exclude: frozenset[str] | set[str] = frozenset(),
     ) -> ImageEntry | None:
         """筛选后随机抽一张；候选全在 exclude 里时忽略 exclude（重置防重复）。"""
-        pool = [e for e in self._entries if self._match(e, category, keyword, allow_nsfw)]
+        pool = [
+            e for e in self._entries if self._match(e, category, keyword, allow_nsfw)
+        ]
         if not pool:
             return None
         fresh = [e for e in pool if e.rel_path not in exclude]
@@ -155,7 +159,9 @@ class Gallery:
         allowed = {"title", "artist", "rating", "tags"}
         bad = set(fields) - allowed
         if bad:
-            raise GalleryError(f"不支持的字段：{'、'.join(sorted(bad))}（可用：title/artist/rating/tags）")
+            raise GalleryError(
+                f"不支持的字段：{'、'.join(sorted(bad))}（可用：title/artist/rating/tags）"
+            )
         if "rating" in fields and str(fields["rating"]).lower() not in RATINGS:
             raise GalleryError("rating 只能是 safe 或 nsfw")
         if "tags" in fields and isinstance(fields["tags"], str):
@@ -183,7 +189,12 @@ class Gallery:
         文件名净化后若重名自动追加 -1/-2…;非法输入抛 GalleryError。
         """
         category = (category or "").strip()
-        if not category or "/" in category or "\\" in category or category.startswith("."):
+        if (
+            not category
+            or "/" in category
+            or "\\" in category
+            or category.startswith(".")
+        ):
             raise GalleryError(f"类别不存在:{category or '(空)'}")
         cat_dir = self.root / category
         if not cat_dir.is_dir():

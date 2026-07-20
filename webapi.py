@@ -110,9 +110,7 @@ async def handle_images(plugin: "RefGalleryPlugin"):
 
 
 def image_detail_data(plugin: "RefGalleryPlugin", rel_path: str) -> dict:
-    entry = next(
-        (e for e in plugin.gallery.entries if e.rel_path == rel_path), None
-    )
+    entry = next((e for e in plugin.gallery.entries if e.rel_path == rel_path), None)
     if entry is None:
         raise GalleryError(f"图库里没有 {rel_path}")
     data = entry.abs_path.read_bytes()
@@ -188,7 +186,9 @@ async def handle_meta(plugin: "RefGalleryPlugin"):
 # ------------------------------ 维护 ------------------------------
 async def handle_rescan(plugin: "RefGalleryPlugin"):
     added, removed = await asyncio.to_thread(plugin.gallery.scan)
-    return _ok({"added": added, "removed": removed, "total": len(plugin.gallery.entries)})
+    return _ok(
+        {"added": added, "removed": removed, "total": len(plugin.gallery.entries)}
+    )
 
 
 async def handle_nsfw_remove(plugin: "RefGalleryPlugin"):
